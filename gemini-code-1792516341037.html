@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Navegación Pro - Centrado Manual</title>
+
+<!-- Versión actualizada de Leaflet CSS (1.9.4) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<!-- Versión actualizada de Leaflet JS (1.9.4) -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<style>
+    body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+    #map { height: 75vh; transition: opacity 0.5s; }
+    
+    #recenterBtn {
+        position: absolute;
+        bottom: 27vh;
+        right: 20px;
+        z-index: 1000;
+        width: 55px;
+        height: 55px;
+        background: white;
+        border: none;
+        border-radius: 50%;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: transform 0.2s, background 0.2s;
+    }
+    #recenterBtn:active { transform: scale(0.9); background: #f0f0f0; }
+    #recenterBtn svg { width: 28px; height: 28px; fill: #1a73e8; }
+
+    .gm-marker {
+        position: relative; width: 40px; height: 40px;
+        background: #ea4335; border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg); display: flex;
+        justify-content: center; align-items: center;
+        border: 1px solid #c5221f; box-shadow: -4px 4px 10px rgba(0,0,0,0.3);
+    }
+    .gm-marker span {
+        transform: rotate(45deg); color: #ea4335; font-weight: bold;
+        font-size: 14px; background: white; width: 25px; height: 25px;
+        border-radius: 50%; display: flex; justify-content: center; align-items: center;
+    }
+
+    #timer-container {
+        position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+        z-index: 1000; background: rgba(0,0,0,0.85); color: #fff;
+        padding: 10px 30px; border-radius: 30px; font-family: 'Segoe UI', sans-serif;
+        font-size: 32px; font-weight: bold; border: 1px solid #444;
+    }
+
+    #panel {
+        height: 25vh; background: #0f0f0f; color: white;
+        font-family: 'Roboto', sans-serif; display: flex;
+        flex-direction: column; justify-content: center; align-items: center;
+        position: relative;
+    }
+
+    #mainBtn {
+        width: 150px; height: 150px; border-radius: 50%; border: none;
+        background: #333; color: #777; cursor: not-allowed;
+        display: flex; justify-content: center; align-items: center;
+        transition: all 0.2s ease; margin-bottom: 10px; z-index: 10;
+    }
+    #mainBtn.active { background: #ff0000; color: white; cursor: pointer; }
+    #mainBtn.finished { background: #4caf50; color: white; cursor: default; }
+    #mainBtn svg { width: 40px; height: 40px; fill: currentColor; }
+
+    #stats { display: flex; gap: 40px; font-size: 24px; margin-bottom: 15px; color: #aaa; }
+    #progressBar { width: 85%; height: 20px; background: #333; border-radius: 10px; margin-bottom: 10px; overflow: hidden;}
+    #progress { height: 100%; width: 0%; background: #ff0000; transition: width 0.3s; }
+
+    #finalMessage {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: #0f0f0f; display: none; flex-direction: column;
+        justify-content: center; align-items: center; z-index: 1001;
+    }
+
+    .blue-dot { width: 14px; height: 14px; background: #1a73e8; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px #1a73e8; }
+    .warning { color: #aaa; font-size: 11px; margin-bottom: 5px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<div id="timer-container">00:00:00</div>
+
+<button id="recenterBtn">
+    <svg viewBox="0 0 24 24"><path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/></svg>
+</button>
+
+<div id="map"></div>
+
+<div id="panel">
+    <div id="finalMessage">
+        <h2 style="color: #4caf50; margin: 0;">¡RUTA COMPLETADA!</h2>
+        <p id="summary" style="color: #aaa; font-size: 14px;"></p>
+        <button onclick="location.reload()" style="background:none; border:1px solid #444; color:white; padding:5px 15px; border-radius:15px; cursor:pointer; margin-top:10px;">Reiniciar</button>
+    </div>
+
+    <div id="warn" class="warning">Buscando señal GPS...</div>
+    
+    <div id="stats">
+        <div id="distR">0.00 km</div>
+        <div id="speed">0.0 km/h</div>
+        <div id="distF">Rest: --</div>
+    </div>
+
+    <div id="progressBar"><div id="progress"></div></div>
+
+    <button id="mainBtn" disabled>
+        <svg id="btnIcon" viewBox="0 0 24 24"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
+    </button>
+</div>
+
+<script>
+const route = [
+    [41.425635, 2.192283], [41.425781, 2.191783], [41.423967, 2.191863],
+    [41.423991, 2.193102], [41.424017, 2.193458], [41.424012, 2.193799], 
+    [41.423742, 2.195485], [41.423619, 2.195700], [41.423452, 2.195878], 
+    [41.423305, 2.195903], [41.422803, 2.195812], [41.422626, 2.195844], 
+    [41.422422, 2.196050], [41.422447, 2.196098], [41.422322, 2.196345], 
+    [41.422226, 2.196687], [41.422075, 2.197489], [41.422009, 2.197970], 
+    [41.422046, 2.198153], [41.422115, 2.198246], [41.422191, 2.198274], 
+    [41.422534, 2.198257], [41.422956, 2.198211], [41.423360, 2.198413], 
+    [41.423667, 2.198643], [41.424290, 2.199074], [41.424476, 2.199338], 
+    [41.424659, 2.199650], [41.425005, 2.199908], [41.425412, 2.200117], 
+    [41.425705, 2.199809], [41.426185, 2.200302], [41.426843, 2.201274], 
+    [41.428382, 2.202577], [41.428746, 2.202791], [41.428716, 2.202004], 
+    [41.428682, 2.201181], [41.428616, 2.199867], [41.429107, 2.199880], 
+    [41.429647, 2.199836], [41.430096, 2.199810], [41.430685, 2.199713], 
+    [41.431142, 2.199614], [41.431774, 2.198256], [41.432199, 2.197402], 
+    [41.431508, 2.196775], [41.431305, 2.195994], [41.431788, 2.195554], 
+    [41.430422, 2.195779], [41.430230, 2.195202], [41.430022, 2.193705], 
+    [41.430072, 2.191933], [41.429992, 2.191212], [41.426459, 2.1917413], 
+    [41.4259962, 2.1934580], [41.42538, 2.193097]
+];
+
+const markers = [
+    { c: [41.425640, 2.192282], n: "1" },
+    { c: [41.423868, 2.194651], n: "2" },
+    { c: [41.428734, 2.202792], n: "3" },
+    { c: [41.430756, 2.199681], n: "4" },
+    { c: [41.431354, 2.196120], n: "5" },
+    { c: [41.430026, 2.193224], n: "6" },
+    { c: [41.425381, 2.1930974], n: "7" }
+];
+
+const endPoint = route[route.length - 1];
+const map = L.map('map', { zoomControl: false }).setView(route[0], 16);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+// Línea base roja completa
+let redLine = L.polyline(route, {color: '#ff0000', weight: 6, opacity: 0.8}).addTo(map);
+
+// Segmentos verdes individuales para ir superponiendo a medida que se recorren
+const greenSegments = [];
+const segmentStartDistances = [];
+let accumulatedRouteDistance = 0;
+
+function haversine(a, b) {
+    const R = 6371e3;
+    const φ1 = a[0] * Math.PI / 180;
+    const φ2 = b[0] * Math.PI / 180;
+    const Δφ = (b[0] - a[0]) * Math.PI / 180;
+    const Δλ = (b[1] - a[1]) * Math.PI / 180;
+
+    const mathArr = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(mathArr), Math.sqrt(1-mathArr));
+
+    return R * c;
+}
+
+for (let i = 0; i < route.length - 1; i++) {
+    const segmentLength = haversine(route[i], route[i + 1]);
+    segmentStartDistances.push(accumulatedRouteDistance);
+    accumulatedRouteDistance += segmentLength;
+
+    // Creamos una polilínea vacía por cada segmento que cambiará a verde al superarse el 75%
+    greenSegments.push(
+        L.polyline([], {color: '#4caf50', weight: 8, opacity: 0.9}).addTo(map)
+    );
+}
+
+markers.forEach(m => {
+    const icon = L.divIcon({
+        className: '',
+        html: `<div class="gm-marker"><span>${m.n}</span></div>`,
+        iconSize: [30, 30], iconAnchor: [15, 30]
+    });
+    L.marker(m.c, { icon: icon }).addTo(map);
+});
+
+const blueDotIcon = L.divIcon({ className: '', html: '<div class="blue-dot"></div>', iconSize: [20, 20], iconAnchor: [10, 10] });
+
+let userMarker = L.marker(route[0], {icon: blueDotIcon}).addTo(map);
+let accuracyCircle = L.circle(route[0], {radius: 0, fillOpacity: 0.1, stroke: false}).addTo(map);
+
+let lastUserPos = route[0];
+let isStarted = false, isPaused = true, isFinished = false;
+let startTime = null, elapsedTime = 0, timerInterval;
+let totalDistanceCovered = 0;
+
+const icons = {
+    play: '<path d="M8,5.14V19.14L19,12.14L8,5.14Z"/>',
+    pause: '<path d="M14,19H18V5H14M6,19H10V5H6V19Z"/>',
+    check: '<path d="M9,16.17L4.83,12L3.41,13.41L9,19L21,7L19.59,5.59L9,16.17Z"/>'
+};
+
+const totalRouteDistance = accumulatedRouteDistance;
+
+// Función para actualizar los tramos a verde cuando se superan las 3/4 partes (75%) del segmento
+function updateGreenSegments() {
+    for (let i = 0; i < greenSegments.length; i++) {
+        const segmentLength = haversine(route[i], route[i + 1]);
+        const threshold = segmentStartDistances[i] + (segmentLength * 0.75);
+
+        if (totalDistanceCovered >= threshold) {
+            greenSegments[i].setLatLngs([route[i], route[i + 1]]);
+        }
+    }
+}
+
+function updateTimer() {
+    const now = Date.now();
+    const totalMs = elapsedTime + (isStarted && !isPaused && startTime !== null ? now - startTime : 0);
+    const totalSecs = Math.floor(totalMs / 1000);
+    const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+    const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+    const secs = String(totalSecs % 60).padStart(2, '0');
+
+    document.getElementById('timer-container').innerText = `${hrs}:${mins}:${secs}`;
+}
+
+const mainBtn = document.getElementById('mainBtn');
+const btnIcon = document.getElementById('btnIcon');
+
+navigator.geolocation.watchPosition((pos) => {
+    const currentPos = [pos.coords.latitude, pos.coords.longitude];
+    
+    if(!isStarted && !isFinished) {
+        mainBtn.disabled = false;
+        mainBtn.classList.add('active');
+        document.getElementById('warn').innerText = "Señal GPS lista";
+    }
+
+    userMarker.setLatLng(currentPos);
+    accuracyCircle.setLatLng(currentPos).setRadius(pos.coords.accuracy);
+
+    if(isStarted && !isPaused) {
+        const accuracy = pos.coords.accuracy;
+        const stepDist = haversine(lastUserPos, currentPos);
+
+        if (accuracy <= 20 && stepDist >= 2) {
+            totalDistanceCovered += stepDist;
+            updateGreenSegments();
+        }
+        
+        const distToFinish = haversine(currentPos, endPoint);
+        
+        document.getElementById('distR').innerText = `${(totalDistanceCovered / 1000).toFixed(2)} km`;
+        document.getElementById('speed').innerText = `${(pos.coords.speed ? pos.coords.speed * 3.6 : 0).toFixed(1)} km/h`;
+        document.getElementById('distF').innerText = `Rest: ${(distToFinish / 1000).toFixed(2)} km`;
+        
+        const prog = Math.min(100, (totalDistanceCovered / totalRouteDistance) * 100);
+        document.getElementById('progress').style.width = `${prog}%`;
+
+        const cercaDelFinal = distToFinish < 20;
+        const recorridoSuficiente = totalDistanceCovered >= totalRouteDistance * 0.90;
+
+        if (cercaDelFinal && recorridoSuficiente) {
+            clearInterval(timerInterval);
+
+            isFinished = true;
+            isStarted = false;
+            isPaused = true;
+
+            updateTimer();
+
+            mainBtn.classList.remove('active');
+            mainBtn.classList.add('finished');
+            mainBtn.disabled = true;
+            btnIcon.innerHTML = icons.check;
+
+            document.getElementById('summary').innerText =
+                `Distancia: ${(totalDistanceCovered / 1000).toFixed(2)} km | ` +
+                `Tiempo: ${document.getElementById('timer-container').innerText}`;
+
+            document.getElementById('finalMessage').style.display = 'flex';
+        }
+    }
+    lastUserPos = currentPos;
+}, (err) => {
+    console.error(err);
+    document.getElementById('warn').innerText = "Sin acceso a GPS";
+}, { enableHighAccuracy: true });
+
+mainBtn.addEventListener('click', () => {
+    if(isFinished) return;
+
+    if(!isStarted) {
+        isStarted = true;
+        isPaused = false;
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+        btnIcon.innerHTML = icons.pause;
+    } else if(!isPaused) {
+        isPaused = true;
+        elapsedTime += Date.now() - startTime;
+        clearInterval(timerInterval);
+        btnIcon.innerHTML = icons.play;
+    } else {
+        isPaused = false;
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+        btnIcon.innerHTML = icons.pause;
+    }
+});
+
+document.getElementById('recenterBtn').addEventListener('click', () => {
+    map.setView(lastUserPos, 16);
+});
+</script>
+
+</body>
+</html>
