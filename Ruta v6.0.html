@@ -202,12 +202,20 @@ const totalRouteDistance = (() => {
 })();
 
 function updateTimer() {
-    const totalSecs = Math.floor((Date.now() - startTime + elapsedTime) / 1000);
+    const now = Date.now();
+
+    const totalMs = elapsedTime +
+        (isStarted && !isPaused && startTime !== null
+            ? now - startTime
+            : 0);
+
+    const totalSecs = Math.floor(totalMs / 1000);
     const hrs = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
     const mins = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
     const secs = String(totalSecs % 60).padStart(2, '0');
-    document.getElementById('timer-container').innerText = `${hrs}:${mins}:${secs}`;
-}
+
+    document.getElementById('timer-container').innerText =
+        `${hrs}:${mins}:${secs}`;
 
 const mainBtn = document.getElementById('mainBtn');
 const btnIcon = document.getElementById('btnIcon');
@@ -242,17 +250,30 @@ navigator.geolocation.watchPosition((pos) => {
         const prog = Math.min(100, (totalDistanceCovered / totalRouteDistance) * 100);
         document.getElementById('progress').style.width = `${prog}%`;
 
-        if(distToFinish < 20) {
-            clearInterval(timerInterval);
-            isFinished = true;
-            isStarted = false;
-            mainBtn.classList.remove('active');
-            mainBtn.classList.add('finished');
-            btnIcon.innerHTML = icons.check;
-            
-            document.getElementById('summary').innerText = `Distancia: ${(totalDistanceCovered/1000).toFixed(2)} km | Tiempo: ${document.getElementById('timer-container').innerText}`;
-            document.getElementById('finalMessage').style.display = 'flex';
-        }
+      const cercaDelFinal = distToFinish < 20;
+const recorridoSuficiente =
+    totalDistanceCovered >= totalRouteDistance * 0.90;
+
+if (cercaDelFinal && recorridoSuficiente) {
+    clearInterval(timerInterval);
+
+    isFinished = true;
+    isStarted = false;
+    isPaused = true;
+
+    updateTimer();
+
+    mainBtn.classList.remove('active');
+    mainBtn.classList.add('finished');
+    mainBtn.disabled = true;
+    btnIcon.innerHTML = icons.check;
+
+    document.getElementById('summary').innerText =
+        `Distancia: ${(totalDistanceCovered / 1000).toFixed(2)} km | ` +
+        `Tiempo: ${document.getElementById('timer-container').innerText}`;
+
+    document.getElementById('finalMessage').style.display = 'flex';
+}
     }
     lastUserPos = currentPos;
 }, (err) => {
