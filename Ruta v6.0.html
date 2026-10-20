@@ -233,13 +233,15 @@ navigator.geolocation.watchPosition((pos) => {
     accuracyCircle.setLatLng(currentPos).setRadius(pos.coords.accuracy);
 
     if(isStarted && !isPaused) {
-        const stepDist = haversine(lastUserPos, currentPos);
         
         // Filtro básico para evitar sumar rebotes falsos del GPS si estás quieto
-        if (stepDist > 2) {
-            totalDistanceCovered += stepDist;
-            greenLine.addLatLng(currentPos);
-        }
+       const accuracy = pos.coords.accuracy;
+const stepDist = haversine(lastUserPos, currentPos);
+
+if (accuracy <= 20 && stepDist >= 2) {
+    totalDistanceCovered += stepDist;
+    greenLine.addLatLng(currentPos);
+}
         
         const distToFinish = haversine(currentPos, endPoint);
         
